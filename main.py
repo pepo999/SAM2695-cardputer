@@ -160,80 +160,89 @@ class Looper:
     def __init__(self, bpm=120, time_signature=(4, 4)):
         self.bpm = bpm
         self.time_signature = time_signature
-        self.channels = {}
+        self.measure_length = (60 / bpm) * time_signature[0]
+        self.events = []  # List to store recorded events
         self.is_recording = False
-        self.current_channel = None
         self.start_time = None
+        self.playback_running = False
+        self.playback_thread_id = None
         self.metronome_running = False
         self.metronome_thread_id = None
 
-    def set_bpm(self, bpm):
-        self.bpm = bpm
-
-    def set_time_signature(self, beats, beat_unit):
-        self.time_signature = (beats, beat_unit)
-
-    def select_channel(self, channel):
-        if channel not in self.channels:
-            self.channels[channel] = []
-        self.current_channel = channel
-
     def start_recording(self):
-        if self.current_channel is not None:
-            self.is_recording = True
-            self.start_time = time.time()
-            self.channels[self.current_channel] = []
+        self.is_recording = True
+        self.start_time = time.time()
+        self.events = []
 
     def stop_recording(self):
         self.is_recording = False
 
     def record_event(self, event):
-        if self.is_recording and self.current_channel is not None:
+        if self.is_recording:
             timestamp = time.time() - self.start_time
-            self.channels[self.current_channel].append((timestamp, event))
+            self.events.append((timestamp, event))
 
     def play(self):
-        if self.current_channel is not None:
-            events = self.channels[self.current_channel]
-            start_time = time.time()
-            for timestamp, event in events:
-                while time.time() - start_time < timestamp:
-                    pass
+        if self.playback_running:
+            print("Playback already running.")
+            return
+        self.playback_running = True
+        self.playback_thread_id = _thread.start_new_thread(self._play_thread, ())
+
+    def stop_playback(self):
+        self.playback_running = False
+
+    def _play_thread(self):
+        if not self.events:
+            self.events = [(0.0, 62, 5, 4), (0.5, 55, 5, 4), (1.0, 55, 5, 4), (1.5, 55, 5, 4)]
+
+            print("No events recorded.")
+            # return
+        
+        start_time = time.time()
+        while self.playback_running:
+            current_time = time.time() - start_time
+            self.events = sorted(self.events, key = lambda x: x[0])
+            for event in self.events:
+                if current_time >= 2:
+                    print('current time 2?:', current_time)
+                    start_time = time.time()
+                    current_time = 0
+                time.sleep(event[0])
                 self.play_event(event)
+                
+                # if current_time >= timestamp:
+                    # self.play_event(event)
+
+            # Loop back after the measure length
+            
+            # time.sleep(0.0001)
 
     def play_event(self, event):
-        color, note = event
-        playColorAndNote(color, note)
+        print(f"Playing event: {event} at time {time.time()}")
+        octave = event[3]
+        synth.set_instrument(0, 0, event[2])
+        play_note(event[1])
+        synth.set_instrument(0, 0, instrument)
+        # time.sleep(event[0])
 
     def start_metronome(self):
+        beats, beat_unit = self.time_signature
+        interval = 60 / self.bpm
+        for beat in range(beats):
+            if beat == 0:
+                pitch = 100
+            else:
+                pitch = 88
+            self.events.append((interval * (beat + 1), pitch, 115, octave))
         self.metronome_running = True
-        self.metronome_thread_id = _thread.start_new_thread(self.metronome, ())
+        # self.metronome_thread_id = _thread.start_new_thread(self.metronome, ())
 
     def stop_metronome(self):
         self.metronome_running = False
-
-    def metronome(self):
-        global synth
-        beats, beat_unit = self.time_signature
-        interval = 60 / self.bpm
-        high_pitch = 100
-        low_pitch = 88
-        while self.metronome_running:
-            for beat in range(beats):
-                if not self.metronome_running:
-                    break
-                synth.set_instrument(0, 0, 115)
-                if beat == 0:  
-                    play_beep(high_pitch)
-                else:
-                    play_beep(low_pitch)
-                synth.set_instrument(0, 0, instrument)
-                time.sleep(interval)
-
-                
-
-def play_beep(frequency, duration=0.1):
-    metronome.set_note_on(0, frequency, 70)
+        for event in self.events():
+            if event[2] == 115:
+                events.remove(event)
 
 def keyboard(kb):
     global mode, synth, octave, instrument, polyphony, looper
@@ -342,9 +351,6 @@ def keyboard(kb):
         elif key == '2':
             looper.start_recording()
             print('start recording')
-        elif key == '3':
-            looper.stop_recording()
-            print('recording off')
         elif key == '4':
             looper.play()
             print('Play')
@@ -358,6 +364,11 @@ def keyboard(kb):
             else:
                 looper.start_metronome()
             looper_screen()
+        elif key == '3':
+            looper.stop_recording()
+            synth.set_all_notes_off(0)
+            looper.playback_running = False
+
         
         elif key == '`':
             mode = 'menu'
@@ -378,7 +389,7 @@ def play_note(note):
 
 def looper_screen():
     Widgets.fillScreen(0x000000)
-    Widgets.Label('Looper on:' + str(looper.metronome_running), 10, 10, 2)
+    Widgets.Label('Metronome:' + str(looper.metronome_running), 10, 10, 2)
 
 def menu():
     synth.set_all_notes_off(0)
@@ -390,7 +401,7 @@ def menu():
 def info():
     Widgets.fillScreen(0x000000)
     if mode == 'piano':
-        Widgets.Label('Press the numbers to choose instrument', 10, 10, 1)
+        Widgets.Label('Press the [ or ] to change instrument', 10, 10, 1)
         Widgets.Label('Press p to switch polyphony on/off.', 10, 20, 1)
         Widgets.Label('Press - or = to change octave.', 10, 30, 1)
 
@@ -404,7 +415,8 @@ def setup():
     kb = MatrixKeyboard()
     kb.set_callback(keyboard)
     synth.set_instrument(0, 0, 1)
-    looper = Looper()
+    # looper = Looper()
+    looper = Looper(bpm=120, time_signature=(4, 4))
     if mode == 'menu':
         menu()
 
