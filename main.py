@@ -3,6 +3,8 @@ from M5 import *
 from unit import SynthUnit
 import time
 import _thread
+from utility import print_error_msg
+from hardware import *
 
 synth = None
 kb = None
@@ -12,6 +14,7 @@ octave = 0
 instrument = 1
 polyphony = True
 looper = None
+metronome = None
 
 instruments_map = {
 1  : "Grand Piano",
@@ -53,95 +56,94 @@ instruments_map = {
 37  : "Slap Bass 1",
 38  : "Slap Bass 2",
 39  : "Synth Bass 1",
-40  : "Synth Bass 2",
-41  : "Violin",
-42  : "Viola",
-43  : "Cello",
-44  : "Contrabass",
-45  : "Tremolo Strings",
-46  : "Pizzicato Strings",
-47  : "Orchestral Harp",
-48  : "Timpani",
-49  : "String Ensemble 1",
-50  : "String Ensemble 2",
-51  : "Synth Strings 1",
-52  : "Synth Strings 2",
-53  : "Choir Aahs",
-54  : "Voice Oohs",
-55  : "Synth Voice",
-56  : "Orchestra Hit",
-57  : "Trumpet",
-58  : "Trombone",
-59  : "Tuba",
-60  : "Muted Trumpet",
-61  : "French Horn",
-62  : "Brass Section",
-63  : "Synth Brass 1",
-64  : "Synth Brass 2",
-65  : "Soprano Sax",
-66  : "Alto Sax",
-67  : "Tenor Sax",
-68  : "Baritone Sax",
-69  : "Oboe",
-70  : "English Horn",
-71  : "Bassoon",
-72  : "Clarinet",
-73  : "Piccolo",
-74  : "Flute",
-75  : "Recorder",
-76  : "Pan Flute",
-77  : "Blown Bottle",
-78  : "Shakuhachi",
-79  : "Whistle",
-80  : "Ocarina",
-81  : "Lead 1 (Square)",
-82  : "Lead 2 (Sawtooth)",
-83  : "Lead 3 (Calliope)",
-84  : "Lead 4 (Chiff)",
-85  : "Lead 5 (Charang)",
-86  : "Lead 6 (Voice)",
-87  : "Lead 7 (Fifths)",
-88  : "Lead 8 (Bass + Lead)",
-89  : "Pad 1 (Fantasia)",
-90  : "Pad 2 (Warm)",
-91  : "Pad 3 (Polysynth)",
-92  : "Pad 4 (Choir)",
-93  : "Pad 5 (Bowed)",
-94  : "Pad 6 (Metallic)",
-95  : "Pad 7 (Halo)",
-96  : "Pad 8 (Sweep)",
-97  : "FX 1 (Rain)",
-98  : "FX 2 (Soundtrack)",
-99  : "FX 3 (Crystal)",
-100  : "FX 4 (Atmosphere)",
-101  : "FX 5 (Brightness)",
-102  : "FX 6 (Goblins)",
-103  : "FX 7 (Echoes)",
-104  : "FX 8 (Sci-fi)",
-105  : "Sitar",
-106  : "Banjo",
-107  : "Shamisen",
-108  : "Koto",
-109  : "Kalimba",
-110  : "Bag Pipe",
-111  : "Fiddle",
-112  : "Shanai",
-113  : "Tinkle Bell",
-114  : "Agogo",
-115  : "Steel Drums",
-116  : "Woodblock",
-117  : "Taiko Drum",
-118  : "Melodic Tom",
-119  : "Synth Drum",
-120  : "Reverse Cymbal",
-121  : "Guitar Fret Noise",
-122  : "Breath Noise",
-123  : "Seashore",
-124  : "Bird Tweet",
-125  : "Telephone Ring",
-126  : "Helicopter",
-127  : "Applause",
-128  : "Gunshot"
+40  : "Violin",
+41  : "Viola",
+42  : "Cello",
+43  : "Contrabass",
+44  : "Tremolo Strings",
+45  : "Pizzicato Strings",
+46  : "Orchestral Harp",
+47  : "Timpani",
+48  : "String Ensemble 1",
+49  : "String Ensemble 2",
+50  : "Synth Strings 1",
+51  : "Synth Strings 2",
+52  : "Choir Aahs",
+53  : "Voice Oohs",
+54  : "Synth Voice",
+55  : "Orchestra Hit",
+56  : "Trumpet",
+57  : "Trombone",
+58  : "Tuba",
+59  : "Muted Trumpet",
+60  : "French Horn",
+61  : "Brass Section",
+62  : "Synth Brass 1",
+63  : "Synth Brass 2",
+64  : "Soprano Sax",
+65  : "Alto Sax",
+66  : "Tenor Sax",
+67  : "Baritone Sax",
+68  : "Oboe",
+69  : "English Horn",
+70  : "Bassoon",
+71  : "Clarinet",
+72  : "Piccolo",
+73  : "Flute",
+74  : "Recorder",
+75  : "Pan Flute",
+76  : "Blown Bottle",
+77  : "Shakuhachi",
+78  : "Whistle",
+79  : "Ocarina",
+80  : "Lead 1 (Square)",
+81  : "Lead 2 (Sawtooth)",
+82  : "Lead 3 (Calliope)",
+83  : "Lead 4 (Chiff)",
+84  : "Lead 5 (Charang)",
+85  : "Lead 6 (Voice)",
+86  : "Lead 7 (Fifths)",
+87  : "Lead 8 (Bass + Lead)",
+88  : "Pad 1 (Fantasia)",
+89  : "Pad 2 (Warm)",
+90  : "Pad 3 (Polysynth)",
+91  : "Pad 4 (Choir)",
+92  : "Pad 5 (Bowed)",
+93  : "Pad 6 (Metallic)",
+94  : "Pad 7 (Halo)",
+95  : "Pad 8 (Sweep)",
+96  : "FX 1 (Rain)",
+97  : "FX 2 (Soundtrack)",
+98  : "FX 3 (Crystal)",
+99  : "FX 4 (Atmosphere)",
+100  : "FX 5 (Brightness)",
+101  : "FX 6 (Goblins)",
+102  : "FX 7 (Echoes)",
+103  : "FX 8 (Sci-fi)",
+104  : "Sitar",
+105  : "Banjo",
+106  : "Shamisen",
+107  : "Koto",
+108  : "Kalimba",
+109  : "Bag Pipe",
+110  : "Fiddle",
+111  : "Shanai",
+112  : "Tinkle Bell",
+113  : "Agogo",
+114  : "Steel Drums",
+115  : "Woodblock",
+116  : "Taiko Drum",
+117  : "Melodic Tom",
+118  : "Synth Drum",
+119  : "Reverse Cymbal",
+120  : "Guitar Fret Noise",
+121  : "Breath Noise",
+122  : "Seashore",
+123  : "Bird Tweet",
+124  : "Telephone Ring",
+125  : "Helicopter",
+126  : "Applause",
+127  : "Gunshot"
 }
 
 octave_map = {
@@ -223,18 +225,15 @@ class Looper:
                 synth.set_instrument(0, 0, 115)
                 if beat == 0:  
                     play_beep(high_pitch)
-                    synth.set_instrument(0, 0, 1)
                 else:
                     play_beep(low_pitch)
-                    synth.set_instrument(0, 0, instrument)
+                synth.set_instrument(0, 0, instrument)
                 time.sleep(interval)
-                # synth = SynthUnit((1, 2), 1)
-                # synth.set_instrument(0, 0, 1)
+
                 
 
 def play_beep(frequency, duration=0.1):
     metronome.set_note_on(0, frequency, 70)
-
 
 def keyboard(kb):
     global mode, synth, octave, instrument, polyphony, looper
@@ -303,17 +302,23 @@ def keyboard(kb):
                 synth.set_all_notes_off(0)
             play_note(72)
 
-        elif key == '9':
+        elif key == '[':
             instrument -= 1
+            if instrument == 0:
+                instrument = 127
             synth.set_instrument(0, 0, instrument)
             piano()
-        elif key == '0':
+        elif key == ']':
             instrument += 1
+            if instrument == 128:
+                instrument = 1
             synth.set_instrument(0, 0, instrument)
             piano()
         
         elif key == 'p':
             polyphony = not polyphony
+            if polyphony == False:
+                synth.set_all_notes_off(0)
             piano()
 
         elif key == '-':
@@ -361,9 +366,9 @@ def keyboard(kb):
 def piano():
     Widgets.fillScreen(0x000000)
     active_inst = instruments_map[instrument]
-    Widgets.Label('Instrument:' + active_inst, 10, 10, 2)
-    Widgets.Label('Octave:' + str(octave), 10, 30, 2)
-    Widgets.Label('Polyphony:' + str(polyphony), 10, 50, 2)
+    Widgets.Label('Inst:' + active_inst, 10, 10, 2)
+    Widgets.Label('Octave:' + str(octave + 4), 10, 30, 2)
+    Widgets.Label('Poly:' + str(polyphony), 10, 50, 2)
 
 def play_note(note):
     global synth, octave
@@ -390,10 +395,12 @@ def info():
         Widgets.Label('Press - or = to change octave.', 10, 30, 1)
 
 def setup():
-    global synth, kb, looper
+    global synth, kb, looper, metronome
     M5.begin()
     Widgets.setRotation(1)
     synth = SynthUnit((1, 2), 1)
+    metronome = SynthUnit((1, 1), 1)
+    metronome.set_reverb(0,0,0,0)
     kb = MatrixKeyboard()
     kb.set_callback(keyboard)
     synth.set_instrument(0, 0, 1)

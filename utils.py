@@ -130,4 +130,6 @@ instruments_map = {
 }
 
 for k, v in instruments_map.items():
+    if v >= 40:
+        v -=1
     print(v, f' : "{k}",')
