@@ -15,6 +15,7 @@ instrument = 1
 polyphony = True
 looper = None
 metronome = None
+measure_time = None
 
 instruments_map = {
 1  : "Grand Piano",
@@ -193,38 +194,28 @@ class Looper:
         self.playback_running = False
 
     def _play_thread(self):
+        global measure_time
         if not self.events:
-            self.events = [(0.0, 62, 5, 4), (0.5, 55, 5, 4), (1.0, 55, 5, 4), (1.5, 55, 5, 4)]
-
-            print("No events recorded.")
-            # return
+            pass
+            # print("No events recorded.")
         
-        start_time = time.time()
+        if measure_time is None:
+            measure_time = time.time()
         while self.playback_running:
-            current_time = time.time() - start_time
             self.events = sorted(self.events, key = lambda x: x[0])
-            for event in self.events:
-                if current_time >= 2:
-                    print('current time 2?:', current_time)
-                    start_time = time.time()
-                    current_time = 0
-                time.sleep(event[0])
+            time_diffs =[self.events[0][0]] + [self.events[i+1][0]-self.events[i][0] for i in range(len(self.events)-1)]
+            for event, t in zip(self.events, time_diffs):
+                if time.time() - measure_time >= self.measure_length:
+                    measure_time = time.time()
+                time.sleep(t)
                 self.play_event(event)
                 
-                # if current_time >= timestamp:
-                    # self.play_event(event)
-
-            # Loop back after the measure length
-            
-            # time.sleep(0.0001)
 
     def play_event(self, event):
-        print(f"Playing event: {event} at time {time.time()}")
         octave = event[3]
         synth.set_instrument(0, 0, event[2])
         play_note(event[1])
         synth.set_instrument(0, 0, instrument)
-        # time.sleep(event[0])
 
     def start_metronome(self):
         beats, beat_unit = self.time_signature
@@ -236,13 +227,15 @@ class Looper:
                 pitch = 88
             self.events.append((interval * (beat + 1), pitch, 115, octave))
         self.metronome_running = True
-        # self.metronome_thread_id = _thread.start_new_thread(self.metronome, ())
 
     def stop_metronome(self):
-        self.metronome_running = False
         for event in self.events():
+            print('removing clicks')
             if event[2] == 115:
-                events.remove(event)
+                self.events.remove(event)
+            print('are they still there?:')
+        self.metronome_running = False
+        looper_screen()
 
 def keyboard(kb):
     global mode, synth, octave, instrument, polyphony, looper
