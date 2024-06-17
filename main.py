@@ -202,13 +202,14 @@ class Looper:
         if measure_time is None:
             measure_time = time.time()
         while self.playback_running:
-            self.events = sorted(self.events, key = lambda x: x[0])
-            time_diffs =[self.events[0][0]] + [self.events[i+1][0]-self.events[i][0] for i in range(len(self.events)-1)]
-            for event, t in zip(self.events, time_diffs):
-                if time.time() - measure_time >= self.measure_length:
-                    measure_time = time.time()
-                time.sleep(t)
-                self.play_event(event)
+            if self.events != []:
+                self.events = sorted(self.events, key = lambda x: x[0])
+                time_diffs =[self.events[0][0]] + [self.events[i+1][0]-self.events[i][0] for i in range(len(self.events)-1)]
+                for event, t in zip(self.events, time_diffs):
+                    if time.time() - measure_time >= self.measure_length:
+                        measure_time = time.time()
+                    time.sleep(t)
+                    self.play_event(event)
                 
 
     def play_event(self, event):
@@ -229,11 +230,7 @@ class Looper:
         self.metronome_running = True
 
     def stop_metronome(self):
-        for event in self.events():
-            print('removing clicks')
-            if event[2] == 115:
-                self.events.remove(event)
-            print('are they still there?:')
+        self.events = [event for event in self.events if event[2] != 115]
         self.metronome_running = False
         looper_screen()
 
