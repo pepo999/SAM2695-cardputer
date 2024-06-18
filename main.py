@@ -226,7 +226,7 @@ class Looper:
                 pitch = 100
             else:
                 pitch = 88
-            self.events.append((interval * (beat + 1), pitch, 115, octave))
+            self.events.append((interval * (beat + 1), pitch, 115, 0))
         self.metronome_running = True
 
     def stop_metronome(self):
@@ -255,50 +255,75 @@ def keyboard(kb):
         elif key == 'e':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 61, instrument, octave))
+                  
             play_note(61)
         elif key == 's':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 62, instrument, octave))
             play_note(62)
         elif key == 'r':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 63, instrument, octave))
             play_note(63)
         elif key == 'd':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 64, instrument, octave))
             play_note(64)
         elif key == 'f':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 65, instrument, octave))
             play_note(65)
         elif key == 'y':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 66, instrument, octave))
             play_note(66)
         elif key == 'g':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 67, instrument, octave))
             play_note(67)
         elif key == 'u':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 68, instrument, octave))
             play_note(68)
         elif key == 'h':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 69, instrument, octave))
             play_note(69)
         elif key == 'alt':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 70, instrument, octave))
             play_note(70)
         elif key == 'j':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 71, instrument, octave))
             play_note(71)
         elif key == 'k':
             if not polyphony:
                 synth.set_all_notes_off(0)
+            if looper.is_recording:
+                  looper.events.append((time.time() - measure_time, 72, instrument, octave))
             play_note(72)
 
         elif key == '[':
@@ -382,7 +407,7 @@ def looper_screen():
     Widgets.Label('Metronome:' + str(looper.metronome_running), 10, 10, 2)
 
 def menu():
-    synth.set_all_notes_off(0)
+    # synth.set_all_notes_off(0)
     Widgets.fillScreen(0xFFB6C1)
     Widgets.Label("Corizo", 10, 10, 2)
     Widgets.Label("1. Keyboard mode", 10, 40, 2)
