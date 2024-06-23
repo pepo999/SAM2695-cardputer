@@ -221,6 +221,9 @@ key_map = {
         'u': lambda: change_volume(5),
         '\\': lambda: looper.delete_last()
     },
+    "drums":{
+
+    },
     "looper": {
         '1': lambda: set_mode('piano'),
         '2': lambda: print_info(''),
@@ -233,6 +236,8 @@ key_map = {
         'y': lambda: change_volume(-5),
         'u': lambda: change_volume(5),
         '\\': lambda: looper.delete_last(),
+        'w': lambda: looper.change_bpm(-5),
+        'e': lambda: looper.change_bpm(5),
         'i': lambda: looper.change_time_signature(-1),
         'o': lambda: looper.change_time_signature(1)
     }
@@ -245,10 +250,10 @@ key_map = {
 
 
 class Looper:
-    def __init__(self, bpm=120, time_signature=5):
-        self.bpm = bpm
-        self.time_signature = time_signature
-        self.measure_length = (60 / bpm) * time_signature * 1e9
+    def __init__(self):
+        self.bpm = 120
+        self.time_signature = 5
+        self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
         self.measure_time = None
         self.events = []
         self.is_recording = False
@@ -270,16 +275,32 @@ class Looper:
             delta_time = 0
             current_time = 0
 
-    # def change_time_signature(self, change):
-    #     if 0 < self.time_signature+ change:
-    #         self.time_signature += change
-    #     # insert logic here
-    #     update_screen()
-
     def change_time_signature(self, change):
         if 0 < self.time_signature + change:
             self.time_signature += change
 
+            self.events = [_ for _ in self.events if _[2] != 115]
+            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
+            interval = (60 / self.bpm) * 1e9
+            for beat in range(self.time_signature):
+                if beat == 0:
+                    pitch = 100
+                    t = interval * beat
+                elif beat == self.time_signature:
+                    pitch = 0
+                    t = self.measure_length
+                else:
+                    pitch = 88
+                    t = interval * beat
+                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
+            if self.metronome_running:
+                self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
+            update_screen()
+
+    def change_bpm(self, change):
+        if 0 < self.bpm + change:
+            # to add: events time should be recalculated relative to bpm
+            self.bpm += change
             self.events = [_ for _ in self.events if _[2] != 115]
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
@@ -314,7 +335,7 @@ class Looper:
                     else:
                         break
                 except Exception as e:
-                    print('eror', str(e))
+                    print('Error', str(e))
                     idx -= 1
 
     def play_event(self, event):
@@ -326,18 +347,21 @@ class Looper:
         octave = old_octave
         synth.set_instrument(0, 0, instrument)
 
-    def metronome(self):
-        # check this condition
-        if len([_ for _ in self.events if _[2] == 115]) != self.time_signature:
-            self.events = [_ for _ in self.events if _[2] != 115]
-            interval = (60 / self.bpm) * 1e9
-            for beat in range(self.time_signature):
-                if beat == 0:
-                    pitch = 100
-                else:
-                    pitch = 88
-                binary_search_insert(self.events, (interval * beat, pitch, 115, octave, 0))
+    def init_metronome(self):
+        interval = (60 / self.bpm * 1e9)
+        for beat in range(self.time_signature):
+            if beat == 0:
+                pitch = 100
+                t = interval * beat
+            elif beat == self.time_signature:
+                pitch = 0
+                t = self.measure_length
+            else:
+                pitch = 88
+                t = interval * beat
+            self.events.append((t, pitch, 115, octave, 0))
 
+    def metronome(self):
         self.metronome_running = not self.metronome_running
         if not self.metronome_running:
             self.events = [(event[0], event[1], event[2], event[3], 0 if event[2] == 115 else event[4]) for event in self.events]
@@ -362,10 +386,15 @@ class Looper:
             self.history.pop()
             self.delete_last()
 
+
+###############
+#  FUNCTIONS  #       
+###############
+
+
 def binary_search_insert(events, new_event):
     low = 0
     high = len(events)
-    
     while low < high:
         mid = (low + high) // 2
         if events[mid][0] < new_event[0]:
@@ -441,14 +470,14 @@ def update_screen():
     elif mode == 'looper':
         Widgets.fillScreen(0x000000)
         Widgets.Label(f'Metronome:{"On" if looper.metronome_running else "Off"}', 10, 10, 2)
-        Widgets.Label(f'Playing:     {looper.is_playing}', 10, 30, 2)
+        Widgets.Label(f'Playing:{looper.is_playing}', 10, 30, 2)
         Widgets.Label(f'Recording: {"On" if looper.is_recording else "Off"}', 10, 50, 2)
-        # Widgets.Label(f"Volume:{volume}", 10, 70, 2)
-        Widgets.Label(f"Time signature:{looper.time_signature-1}/4", 10, 70, 2)
+        Widgets.Label(f"Bpm:{looper.bpm}", 10, 70, 2)
+        Widgets.Label(f"Time signature:{looper.time_signature-1}/4", 10, 90, 2)
 
 def main():
     while True:
-        kb.tick() ##
+        kb.tick()
         looper.loop()
         M5.update()
         time.sleep(0.00001)
@@ -464,20 +493,14 @@ def setup():
     kb = MatrixKeyboard()
     kb.set_callback(keyboard)
     looper = Looper()
+    looper.init_metronome()
     update_screen()
-    # initialize metronome
-    interval = (60 / looper.bpm * 1e9)
-    for beat in range(looper.time_signature):
-        if beat == 0:
-            pitch = 100
-            t = interval * beat
-        elif beat == looper.time_signature:
-            pitch = 0
-            t = looper.measure_length
-        else:
-            pitch = 88
-            t = interval * beat
-        looper.events.append((t, pitch, 115, octave, 0))
+
+
+###########################
+#  MAIN FUNCTION CALLING  #
+###########################
+
 
 if __name__ == '__main__':
     try:
