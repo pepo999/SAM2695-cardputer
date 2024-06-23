@@ -16,7 +16,7 @@ from hardware import *
 kb = None
 synth = None
 mode = 'menu'
-looper = None
+looper = Looper()
 
 # SYNTH
 instrument = 1
@@ -31,7 +31,8 @@ delta_time = 0
 idx = 0
 
 # SCREEN
-background_color = 0xFFB6C1
+y = 0 # UI position
+background_color = 0xB45B9F # 0xFFB6C1
 
 # MAPS
 octave_map = {
@@ -44,6 +45,27 @@ octave_map = {
     3: 36
 }
 
+ui_map = {
+  "menu": [
+        ("Corizo", "", lambda: print('')),
+        ("1. Keyboard mode", "", lambda: print('')),
+        ("2. Looper mode", "", lambda: print(''))
+        ],
+  "piano": [
+        ("Inst:", lambda: instruments_map[instrument], lambda: change_instrument(1), lambda: change_instrument(-1)),
+        ("Octave:", lambda: octave + 4, lambda: change_octave(1), lambda: change_octave(-1)),
+        ("Polyphony:", lambda: polyphony, lambda: switch_polyphony(), lambda: switch_polyphony()),
+        ("Volume:", lambda: volume, lambda: change_volume(5), lambda: change_volume(-5))
+  ],
+  "looper": [
+        ('Metronome:', lambda: "On" if looper.metronome_running else "Off", lambda: looper.metronome(), lambda: looper.metronome()),
+        ('Playing:', lambda: "On" if looper.is_playing else "Off", lambda: looper.switch_play(), lambda: looper.switch_play()),
+        ('Recording:', lambda: "On" if looper.is_recording else "Off", lambda: looper.recording(), lambda: looper.recording()),
+        ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(1), lambda: looper.change_bpm(-1)),
+        ('Time signature:', lambda: looper.time_signature - 1, lambda: looper.change_time_signature(1), lambda: looper.change_time_signature(-1))
+  ]
+}
+        
 instruments_map = {
 1  : "Grand Piano",
 2  : "Bright Piano",
@@ -199,32 +221,41 @@ key_map = {
         '0': lambda: looper.clear_events()
     },
     "piano": {
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1),
+        '/': lambda: ui_map[mode][y][2](),
+        ',': lambda: ui_map[mode][y][3](),
         '1': lambda: print_info(''),
         '2': lambda: set_mode('looper'),
         '0': lambda: looper.clear_events(),
         'a': lambda: play_note(60, volume),
+        'e': lambda: play_note(61, volume),
         's': lambda: play_note(62, volume),
+        'r': lambda: play_note(63, volume),
         'd': lambda: play_note(64, volume),
         'f': lambda: play_note(65, volume),
+        't': lambda: play_note(66, volume),
         'g': lambda: play_note(67, volume),
+        'y': lambda: play_note(68, volume),
         'h': lambda: play_note(69, volume),
+        'u': lambda: play_note(70, volume),
         'j': lambda: play_note(71, volume),
         'k': lambda: play_note(72, volume),
-        'p': lambda: switch_polyphony(),
-        '-': lambda: change_octave(-1),
-        '=': lambda: change_octave(1),
-        '[': lambda: change_instrument(-1),
-        ']': lambda: change_instrument(1),
+        'p': lambda: looper.switch_play(),
         'm': lambda: print_info('Info'),
         '`': lambda: set_mode('menu'),
-        'y': lambda: change_volume(-5),
-        'u': lambda: change_volume(5),
         '\\': lambda: looper.delete_last()
     },
     "drums":{
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1)
 
     },
     "looper": {
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1),
+        '/': lambda: ui_map[mode][y][2](),
+        ',': lambda: ui_map[mode][y][3](),
         '1': lambda: set_mode('piano'),
         '2': lambda: print_info(''),
         '0': lambda: looper.clear_events(),
@@ -264,7 +295,7 @@ class Looper:
 
     def recording(self):
         self.is_recording = not self.is_recording
-        update_screen()
+        update_screen(mode, y)
 
     def switch_play(self):
         global start_time, delta_time, idx, current_time
@@ -295,7 +326,7 @@ class Looper:
                 binary_search_insert(self.events, (t, pitch, 115, octave, 0))
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen()
+            update_screen(mode, y)
 
     def change_bpm(self, change):
         if 0 < self.bpm + change:
@@ -317,7 +348,7 @@ class Looper:
                 binary_search_insert(self.events, (t, pitch, 115, octave, 0))
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen()
+            update_screen(mode, y)
 
     def loop(self):
         global start_time, idx
@@ -335,7 +366,7 @@ class Looper:
                     else:
                         break
                 except Exception as e:
-                    print('Error', str(e))
+                    # print('Error', str(e))
                     idx -= 1
 
     def play_event(self, event):
@@ -367,13 +398,13 @@ class Looper:
             self.events = [(event[0], event[1], event[2], event[3], 0 if event[2] == 115 else event[4]) for event in self.events]
         else:
             self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-        update_screen()
+        update_screen(mode, y)
 
     def clear_events(self):
         synth.set_all_notes_off(0)
         self.events = [_ for _ in self.events if _[2] == 115]
         self.is_playing = False
-        update_screen()
+        update_screen(mode, y)
 
     def delete_last(self):
         if not self.history:
@@ -414,7 +445,7 @@ def keyboard(kb):
         delta_time = current_time % (looper.measure_length)
         binary_search_insert(looper.events, (delta_time, note, instrument, octave, volume))
         looper.history.append((delta_time, note, instrument, octave, volume))
-    update_screen()
+    update_screen(mode, y)
 
 def play_note(note, volume):
     global synth, octave
@@ -424,56 +455,64 @@ def play_note(note, volume):
         note += octave_map[octave]
     synth.set_note_on(0, note, volume)
 
+def change_y(change):
+    global y
+    if 0 <= y + change < len(ui_map[mode]):
+        y += change
+    update_screen(mode, y)
+
 def change_instrument(change):
     global instrument
     instrument = (instrument + change - 1) % 127 + 1
     synth.set_instrument(0, 0, instrument)
-    update_screen()
+    update_screen(mode, y)
 
 def change_volume(change):
     global volume
     if 0 <= volume + change <= 125:
         volume += change
-    update_screen()
+    update_screen(mode, y)
 
 def change_octave(change):
     global octave
     if -3 <= octave + change <= 3:
         octave += change
-    update_screen()
+    update_screen(mode, y)
 
 def set_mode(new_mode):
-    global mode
+    global mode, y
+    y = 0
     mode = new_mode
-    update_screen()
+    update_screen(mode, y)
 
 def switch_polyphony():
     global polyphony
     polyphony = not polyphony
-    update_screen()
+    update_screen(mode, y)
 
 def print_info(info):
-    print(info)
+    pass
+    # print(info)
 
-def update_screen():
+def update_screen(mode, y):
+    label_y = 10
     if mode == 'menu':
         Widgets.fillScreen(background_color)
-        Widgets.Label("Corizo", 10, 10, 2)
-        Widgets.Label("1. Keyboard mode", 10, 40, 2)
-        Widgets.Label("2. Looper mode", 10, 60, 2)
-    elif mode == 'piano':
+        for idx, label_info in enumerate(ui_map[mode]):
+            label_text = label_info[0]
+            Widgets.Label(label_text, 10, label_y, 2, 0xffffff, 0x000000)
+            label_y += 20
+    else:
         Widgets.fillScreen(0x000000)
-        Widgets.Label(f"Inst:{instruments_map[instrument]}", 10, 10, 2)
-        Widgets.Label(f"Octave:{octave + 4}", 10, 30, 2)
-        Widgets.Label(f"Polyphony:{polyphony}", 10, 50, 2)
-        Widgets.Label(f"Volume:{volume}", 10, 70, 2)
-    elif mode == 'looper':
-        Widgets.fillScreen(0x000000)
-        Widgets.Label(f'Metronome:{"On" if looper.metronome_running else "Off"}', 10, 10, 2)
-        Widgets.Label(f'Playing:{looper.is_playing}', 10, 30, 2)
-        Widgets.Label(f'Recording: {"On" if looper.is_recording else "Off"}', 10, 50, 2)
-        Widgets.Label(f"Bpm:{looper.bpm}", 10, 70, 2)
-        Widgets.Label(f"Time signature:{looper.time_signature-1}/4", 10, 90, 2)
+        for idx, label_info in enumerate(ui_map[mode]):
+            label_text = label_info[0]
+            get_label_val = label_info[1]
+            label_val = get_label_val() if callable(get_label_val) else get_label_val
+            if y == idx:
+                Widgets.Label(label_text + str(label_val), 10, label_y, 2, 0xffffff, background_color)
+            else:
+                Widgets.Label(label_text + str(label_val), 10, label_y, 2, 0xffffff, 0x000000)
+            label_y += 20
 
 def main():
     while True:
@@ -492,9 +531,9 @@ def setup():
     synth.set_reverb(1, 0, 0, 0)
     kb = MatrixKeyboard()
     kb.set_callback(keyboard)
-    looper = Looper()
     looper.init_metronome()
-    update_screen()
+    Widgets.fillScreen(background_color)
+    update_screen(mode, y)
 
 
 ###########################
