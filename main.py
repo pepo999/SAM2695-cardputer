@@ -31,6 +31,7 @@ delta_time = 0
 idx = 0
 
 # SCREEN
+y = 0 # UI position
 background_color = 0xFFB6C1
 
 # MAPS
@@ -43,6 +44,31 @@ octave_map = {
     2: 24,
     3: 36
 }
+
+ui_map = {
+  "menu": [
+        Widgets.Label("Corizo", 10, 10, 2, 0xffffff, 0x222222),
+        Widgets.Label("1. Keyboard mode", 10, 40, 2, 0xffffff, 0x222222),
+        Widgets.Label("2. Looper mode", 10, 60, 2, 0xffffff, 0x222222)
+        ]
+}
+
+def selected(mode, y):
+    for idx, label in enumerate(ui_map[mode]):
+        if y == idx:
+            label.setColor(0xffffff, 0x56010c)
+            label
+        else:
+            label.setColor(0xffffff, 0x222222)
+            label
+        # label
+
+func_map = {
+  "menu": {
+    1: ''
+  }
+}
+        
 
 instruments_map = {
 1  : "Grand Piano",
@@ -187,6 +213,8 @@ note_map = {
 
 key_map = {
     "menu": {
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1),
         '1': lambda: set_mode('piano'),
         '2': lambda: set_mode('looper'),
         '3': lambda: print_info('3'),
@@ -264,7 +292,8 @@ class Looper:
 
     def recording(self):
         self.is_recording = not self.is_recording
-        update_screen()
+        # update_screen()
+        selected(mode, y)
 
     def switch_play(self):
         global start_time, delta_time, idx, current_time
@@ -295,7 +324,8 @@ class Looper:
                 binary_search_insert(self.events, (t, pitch, 115, octave, 0))
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen()
+            # update_screen()
+            selected(mode, y)
 
     def change_bpm(self, change):
         if 0 < self.bpm + change:
@@ -317,7 +347,8 @@ class Looper:
                 binary_search_insert(self.events, (t, pitch, 115, octave, 0))
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen()
+            # update_screen()
+            selected(mode, y)
 
     def loop(self):
         global start_time, idx
@@ -367,13 +398,15 @@ class Looper:
             self.events = [(event[0], event[1], event[2], event[3], 0 if event[2] == 115 else event[4]) for event in self.events]
         else:
             self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-        update_screen()
+        # update_screen()
+        selected(mode, y)
 
     def clear_events(self):
         synth.set_all_notes_off(0)
         self.events = [_ for _ in self.events if _[2] == 115]
         self.is_playing = False
-        update_screen()
+        # update_screen()
+        selected(mode, y)
 
     def delete_last(self):
         if not self.history:
@@ -414,7 +447,8 @@ def keyboard(kb):
         delta_time = current_time % (looper.measure_length)
         binary_search_insert(looper.events, (delta_time, note, instrument, octave, volume))
         looper.history.append((delta_time, note, instrument, octave, volume))
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 def play_note(note, volume):
     global synth, octave
@@ -424,17 +458,28 @@ def play_note(note, volume):
         note += octave_map[octave]
     synth.set_note_on(0, note, volume)
 
+def change_y(change):
+    global y
+    if 0 <= y + change < len(ui_map[mode]):
+        y += change
+    print(y)
+    print(ui_map[mode])
+    # update_screen()
+    selected(mode, y)
+
 def change_instrument(change):
     global instrument
     instrument = (instrument + change - 1) % 127 + 1
     synth.set_instrument(0, 0, instrument)
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 def change_volume(change):
     global volume
     if 0 <= volume + change <= 125:
         volume += change
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 def change_octave(change):
     global octave
@@ -445,12 +490,14 @@ def change_octave(change):
 def set_mode(new_mode):
     global mode
     mode = new_mode
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 def switch_polyphony():
     global polyphony
     polyphony = not polyphony
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 def print_info(info):
     print(info)
@@ -494,7 +541,8 @@ def setup():
     kb.set_callback(keyboard)
     looper = Looper()
     looper.init_metronome()
-    update_screen()
+    # update_screen()
+    selected(mode, y)
 
 
 ###########################
