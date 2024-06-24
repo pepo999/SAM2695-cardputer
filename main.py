@@ -38,6 +38,7 @@ class Looper:
             idx = 0
             delta_time = 0
             current_time = 0
+        update_screen(mode, y)
 
     def change_time_signature(self, change):
         if 0 < self.time_signature + change:
@@ -84,14 +85,17 @@ class Looper:
             update_screen(mode, y)
 
     def loop(self):
-        global start_time, idx
+        global start_time, idx, drum_idx
         if self.is_playing:
             while True and self.events != []:
                 current_time = time_ns() - start_time
                 delta_time = current_time % self.measure_length
                 try:
                     if delta_time > self.events[idx][0]:
-                        self.play_event(self.events[idx])
+                        if self.events[idx][2] == '':
+                            self.play_drum_event(self.events[idx])
+                        else:
+                            self.play_event(self.events[idx])
                         idx += 1
                         if idx >= len(self.events):
                             idx = 0
@@ -99,7 +103,6 @@ class Looper:
                     else:
                         break
                 except Exception as e:
-                    # print('Error', str(e))
                     idx -= 1
 
     def play_event(self, event):
@@ -110,6 +113,9 @@ class Looper:
         play_note(event[1], event[4])
         octave = old_octave
         synth.set_instrument(0, 0, instrument)
+
+    def play_drum_event(self, event):
+        play_drum_note(event[1], event[4])
 
     def init_metronome(self):
         interval = (60 / self.bpm * 1e9)
@@ -134,8 +140,10 @@ class Looper:
         update_screen(mode, y)
 
     def clear_events(self):
-        synth.set_all_notes_off(0)
+        for i in range(16):
+            synth.set_all_notes_off(i)
         self.events = [_ for _ in self.events if _[2] == 115]
+        self.history = []
         self.is_playing = False
         update_screen(mode, y)
 
@@ -168,12 +176,14 @@ octave = 0
 volume = 40
 polyphony = True
 drum_kit = 1
+channel = 0
 
 # LOOPER
 start_time = 0
 current_time = 0
 delta_time = 0
 idx = 0
+drum_idx = 0
 
 # SCREEN
 y = 0 # UI position
@@ -195,7 +205,7 @@ ui_map = {
         ("Corizo", "", lambda: print('')),
         ("1. Keyboard mode", "", lambda: print('')),
         ("2. Looper mode", "", lambda: print('')),
-        ("2. Drums mode", "", lambda: print(''))
+        ("3. Drum mode", "", lambda: print(''))
         ],
   "piano": [
         ("Inst:", lambda: instruments_map[instrument], lambda: change_instrument(1), lambda: change_instrument(-1)),
@@ -366,6 +376,18 @@ drum_map = {
         1: ['Kick drum', 'Snare Drum', 'Acoustic Low Tom', 'Acoustic Middle Tom', 'Crash Cymbal 2', 'Crash Cymbal', 'Ride Cymbal', 'Open Hi Hat [EXC1]', 'Closed Hi Hat [EXC1]']
 }
 
+drum_note_map = {
+      'a': 0,
+      's': 1,
+      'd': 2,
+      'f': 3,
+      'g': 4,
+      'h': 5,
+      'j': 6,
+      'k': 7,
+      'l': 8
+}
+
 key_map = {
     "menu": {
         '1': lambda: set_mode('piano'),
@@ -384,8 +406,8 @@ key_map = {
         '.': lambda: change_y(1),
         '/': lambda: ui_map[mode][y][2](),
         ',': lambda: ui_map[mode][y][3](),
-        # '1': lambda: print_info(''),
         '2': lambda: set_mode('looper'),
+        '3': lambda: set_mode('drums'),
         '0': lambda: looper.clear_events(),
         'a': lambda: play_note(60, volume),
         'e': lambda: play_note(61, volume),
@@ -429,7 +451,6 @@ key_map = {
         '/': lambda: ui_map[mode][y][2](),
         ',': lambda: ui_map[mode][y][3](),
         '1': lambda: set_mode('piano'),
-        # '2': lambda: print_info(''),
         '3': lambda: set_mode('drums'),
         '0': lambda: looper.clear_events(),
         'r': lambda: looper.recording(),
@@ -475,18 +496,27 @@ def keyboard(kb):
         delta_time = current_time % (looper.measure_length)
         binary_search_insert(looper.events, (delta_time, note, instrument, octave, volume))
         looper.history.append((delta_time, note, instrument, octave, volume))
-    update_screen(mode, y)
+    drum_sound = drum_note_map.get(key, None)
+
+    if looper.is_recording and looper.is_playing and drum_sound is not None and mode == 'drums':
+        current_time = time_ns() - start_time
+        delta_time = current_time % (looper.measure_length)
+        binary_search_insert(looper.events, (delta_time, drum_map[drum_kit][drum_sound], '', 0, volume))
+        looper.history.append((delta_time, drum_map[drum_kit][drum_sound], '', 0, volume))
 
 def play_note(note, volume):
-    global synth, octave
+    global synth, octave, channel
     if not polyphony:
         synth.set_all_notes_off(0)
     if -3 <= octave <= 3:
         note += octave_map[octave]
     synth.set_note_on(0, note, volume)
+    if channel + 1 <= 15:
+        channel += 1
+    else:
+        channel = 0
 
 def play_drum_note(drum_sound, volume):
-    global synth, octave
     if not polyphony:
         synth.set_all_notes_off(0)
     synth.set_drums_instrument(drum_sound, volume)
@@ -528,7 +558,6 @@ def switch_polyphony():
 
 def print_info(info):
     pass
-    # print(info)
 
 def update_screen(mode, y):
     label_y = 10
