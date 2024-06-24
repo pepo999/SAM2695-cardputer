@@ -38,6 +38,8 @@ class Looper:
             idx = 0
             delta_time = 0
             current_time = 0
+            for i in range(16):
+                synth.set_all_notes_off(i)
         update_screen(mode, y)
 
     def change_time_signature(self, change):
@@ -221,7 +223,7 @@ ui_map = {
         ('Metronome:', lambda: "On" if looper.metronome_running else "Off", lambda: looper.metronome(), lambda: looper.metronome()),
         ('Playing:', lambda: "On" if looper.is_playing else "Off", lambda: looper.switch_play(), lambda: looper.switch_play()),
         ('Recording:', lambda: "On" if looper.is_recording else "Off", lambda: looper.recording(), lambda: looper.recording()),
-        ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(1), lambda: looper.change_bpm(-1)),
+        ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(5), lambda: looper.change_bpm(-5)),
         ('Time signature:', lambda: looper.time_signature - 1, lambda: looper.change_time_signature(1), lambda: looper.change_time_signature(-1))
   ]
 }
@@ -458,13 +460,7 @@ key_map = {
         'q': lambda: looper.metronome(),
         'm': lambda: print_info('Info'),
         '`': lambda: set_mode('menu'),
-        'y': lambda: change_volume(-5),
-        'u': lambda: change_volume(5),
         '\\': lambda: looper.delete_last(),
-        'w': lambda: looper.change_bpm(-5),
-        'e': lambda: looper.change_bpm(5),
-        'i': lambda: looper.change_time_signature(-1),
-        'o': lambda: looper.change_time_signature(1)
     }
 }
 
@@ -560,7 +556,6 @@ class Looper:
                     else:
                         break
                 except Exception as e:
-                    # print('Error', str(e))
                     idx -= 1
 
     def play_event(self, event):
@@ -610,6 +605,7 @@ class Looper:
         else:
             self.history.pop()
             self.delete_last()
+
 
 ###############
 #  FUNCTIONS  #       
@@ -678,6 +674,10 @@ def change_y(change):
 def change_instrument(change):
     global instrument
     instrument = (instrument + change - 1) % 127 + 1
+    if instrument == 115 and change == 1:
+        instrument = 116
+    if instrument == 115 and change == -1:
+        instrument = 114
     synth.set_instrument(0, 0, instrument)
     update_screen(mode, y)
 
