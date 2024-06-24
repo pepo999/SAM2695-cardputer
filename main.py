@@ -469,6 +469,148 @@ key_map = {
 }
 
 
+#############
+#  CLASSES  #
+#############
+
+
+class Looper:
+    def __init__(self):
+        self.bpm = 120
+        self.time_signature = 5
+        self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
+        self.measure_time = None
+        self.events = []
+        self.is_recording = False
+        self.metronome_running = False
+        self.metronome_volume = 30
+        self.is_playing = False
+        self.history = []
+
+    def recording(self):
+        self.is_recording = not self.is_recording
+        update_screen(mode, y)
+
+    def switch_play(self):
+        global start_time, delta_time, idx, current_time
+        start_time = time_ns()
+        self.is_playing = not self.is_playing
+        if not self.is_playing:
+            idx = 0
+            delta_time = 0
+            current_time = 0
+
+    def change_time_signature(self, change):
+        if 0 < self.time_signature + change:
+            self.time_signature += change
+
+            self.events = [_ for _ in self.events if _[2] != 115]
+            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
+            interval = (60 / self.bpm) * 1e9
+            for beat in range(self.time_signature):
+                if beat == 0:
+                    pitch = 100
+                    t = interval * beat
+                elif beat == self.time_signature:
+                    pitch = 0
+                    t = self.measure_length
+                else:
+                    pitch = 88
+                    t = interval * beat
+                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
+            if self.metronome_running:
+                self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
+            update_screen(mode, y)
+
+    def change_bpm(self, change):
+        if 0 < self.bpm + change:
+            # to add: events time should be recalculated relative to bpm
+            self.bpm += change
+            self.events = [_ for _ in self.events if _[2] != 115]
+            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
+            interval = (60 / self.bpm) * 1e9
+            for beat in range(self.time_signature):
+                if beat == 0:
+                    pitch = 100
+                    t = interval * beat
+                elif beat == self.time_signature:
+                    pitch = 0
+                    t = self.measure_length
+                else:
+                    pitch = 88
+                    t = interval * beat
+                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
+            if self.metronome_running:
+                self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
+            update_screen(mode, y)
+
+    def loop(self):
+        global start_time, idx
+        if self.is_playing:
+            while True and self.events != []:
+                current_time = time_ns() - start_time
+                delta_time = current_time % self.measure_length
+                try:
+                    if delta_time > self.events[idx][0]:
+                        self.play_event(self.events[idx])
+                        idx += 1
+                        if idx >= len(self.events):
+                            idx = 0
+                            start_time = time_ns()
+                    else:
+                        break
+                except Exception as e:
+                    # print('Error', str(e))
+                    idx -= 1
+
+    def play_event(self, event):
+        global octave
+        old_octave = octave
+        octave = event[3]
+        synth.set_instrument(0, 0, event[2])
+        play_note(event[1], event[4])
+        octave = old_octave
+        synth.set_instrument(0, 0, instrument)
+
+    def init_metronome(self):
+        interval = (60 / self.bpm * 1e9)
+        for beat in range(self.time_signature):
+            if beat == 0:
+                pitch = 100
+                t = interval * beat
+            elif beat == self.time_signature:
+                pitch = 0
+                t = self.measure_length
+            else:
+                pitch = 88
+                t = interval * beat
+            self.events.append((t, pitch, 115, octave, 0))
+
+    def metronome(self):
+        self.metronome_running = not self.metronome_running
+        if not self.metronome_running:
+            self.events = [(event[0], event[1], event[2], event[3], 0 if event[2] == 115 else event[4]) for event in self.events]
+        else:
+            self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
+        update_screen(mode, y)
+
+    def clear_events(self):
+        synth.set_all_notes_off(0)
+        self.events = [_ for _ in self.events if _[2] == 115]
+        self.is_playing = False
+        update_screen(mode, y)
+
+    def delete_last(self):
+        if not self.history:
+            return
+        last_event = self.history[-1]
+        if last_event in self.events:
+            del self.events[self.events.index(last_event)]
+            self.history.pop()
+        else:
+            self.history.pop()
+            self.delete_last()
+
 ###############
 #  FUNCTIONS  #       
 ###############
@@ -520,6 +662,12 @@ def play_drum_note(drum_sound, volume):
     if not polyphony:
         synth.set_all_notes_off(0)
     synth.set_drums_instrument(drum_sound, volume)
+
+def change_y(change):
+    global y
+    if 0 <= y + change < len(ui_map[mode]):
+        y += change
+    update_screen(mode, y)
 
 def change_y(change):
     global y
