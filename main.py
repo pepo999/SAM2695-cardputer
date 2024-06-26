@@ -6,6 +6,8 @@ from time import time_ns
 import _thread
 from utility import print_error_msg
 from hardware import *
+from hardware import sdcard
+import json
 
 
 #############
@@ -131,7 +133,7 @@ class Looper:
             else:
                 pitch = 88
                 t = interval * beat
-            self.events.append((t, pitch, 115, octave, 0))
+            binary_search_insert(self.events, (t, pitch, 115, octave, 0))
 
     def metronome(self):
         self.metronome_running = not self.metronome_running
@@ -147,6 +149,9 @@ class Looper:
         self.events = [_ for _ in self.events if _[2] == 115]
         self.history = []
         self.is_playing = False
+        Widgets.fillScreen(0x000000)
+        Widgets.Label('Events deleted', 10, 10, 2, 0xffffff, 0x000000)
+        time.sleep(1)
         update_screen(mode, y)
 
     def delete_last(self):
@@ -160,6 +165,55 @@ class Looper:
             self.history.pop()
             self.delete_last()
 
+class SD_Card:
+    def __init__(self):
+        self.sd_card = sdcard.SDCard(slot=3, width=1, sck=40, miso=39, mosi=14, cs=12, freq=1000000)
+        self.directory = sdcard.os.getcwd()
+        self.listdir = sdcard.os.listdir('/flash')
+
+    def save(self, filename, events):
+        events = [_ for _ in events if _[2] != 115]
+        if events != []:
+            json_events = {
+                "events": events,
+                "time_signature": looper.time_signature,
+                "bpm": looper.bpm
+            }
+            with open(self.directory + '/' + filename + '.json', 'w') as f:
+                json_events = json.dump(json_events, f)
+            Widgets.fillScreen(0x000000)
+            Widgets.Label('Events saved', 10, 10, 2, 0xffffff, 0x000000)
+            time.sleep(1)
+            set_mode("looper")
+
+    def files(self):
+        files = [_ for _ in self.listdir if _.endswith('.json')]
+        if files != []:
+            with open(files[0], 'r') as f:
+                events_dict = json.load(f)
+            looper.events = events_dict["events"]
+            looper.time_signature = events_dict["time_signature"]
+            looper.bpm = events_dict["bpm"]
+            looper.is_playing = False
+            looper.metronome_running = False
+            looper.measure_length = (60 / looper.bpm) * looper.time_signature * 1e9
+            interval = (60 / looper.bpm) * 1e9
+            for beat in range(looper.time_signature):
+                if beat == 0:
+                    pitch = 100
+                    t = interval * beat
+                elif beat == looper.time_signature:
+                    pitch = 0
+                    t = looper.measure_length
+                else:
+                    pitch = 88
+                    t = interval * beat
+                binary_search_insert(looper.events, (t, pitch, 115, octave, 0))
+            Widgets.fillScreen(0x000000)
+            Widgets.Label('Events loaded', 10, 10, 2, 0xffffff, 0x000000)
+            time.sleep(1)
+            set_mode("looper")
+
 
 ######################
 #  GLOBAL VARIABLES  #
@@ -171,6 +225,7 @@ kb = None
 synth = None
 mode = 'menu'
 looper = Looper()
+sd_card = None
 
 # SYNTH
 instrument = 1
@@ -207,7 +262,8 @@ ui_map = {
         ("Corizo", "", lambda: print('')),
         ("1. Keyboard mode", "", lambda: print('')),
         ("2. Looper mode", "", lambda: print('')),
-        ("3. Drum mode", "", lambda: print(''))
+        ("3. Drum mode", "", lambda: print('')),
+        ("4. Options", "", lambda: print(''))
         ],
   "piano": [
         ("Inst:", lambda: instruments_map[instrument], lambda: change_instrument(1), lambda: change_instrument(-1)),
@@ -225,6 +281,10 @@ ui_map = {
         ('Recording:', lambda: "On" if looper.is_recording else "Off", lambda: looper.recording(), lambda: looper.recording()),
         ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(5), lambda: looper.change_bpm(-5)),
         ('Time signature:', lambda: looper.time_signature - 1, lambda: looper.change_time_signature(1), lambda: looper.change_time_signature(-1))
+  ],
+  "options": [
+        ('', lambda: "Save ->" if sd_card else "No SD card found", lambda: set_mode("menu"), lambda: sd_card.save('test', looper.events)),
+        ('', lambda: "Load ->" if sd_card else "", lambda: set_mode("menu"), lambda: sd_card.files()),
   ]
 }
         
@@ -395,7 +455,7 @@ key_map = {
         '1': lambda: set_mode('piano'),
         '2': lambda: set_mode('looper'),
         '3': lambda: set_mode('drums'),
-        '4': lambda: print_info('4'),
+        '4': lambda: set_mode('options'),
         '5': lambda: print_info('5'),
         '6': lambda: print_info('6'),
         '7': lambda: print_info('7'),
@@ -410,6 +470,7 @@ key_map = {
         ',': lambda: ui_map[mode][y][3](),
         '2': lambda: set_mode('looper'),
         '3': lambda: set_mode('drums'),
+        '4': lambda: set_mode('options'),
         '0': lambda: looper.clear_events(),
         'a': lambda: play_note(60, volume),
         'e': lambda: play_note(61, volume),
@@ -434,8 +495,10 @@ key_map = {
         '.': lambda: change_y(1),
         '/': lambda: ui_map[mode][y][2](),
         ',': lambda: ui_map[mode][y][3](),
+        '0': lambda: looper.clear_events(),
         '1': lambda: set_mode('piano'),
         '2': lambda: set_mode('looper'),
+        '4': lambda: set_mode('options'),
         '`': lambda: set_mode('menu'),
         'a': lambda: play_drum_note(drum_map[drum_kit][0], volume),
         's': lambda: play_drum_note(drum_map[drum_kit][1], volume),
@@ -445,7 +508,8 @@ key_map = {
         'h': lambda: play_drum_note(drum_map[drum_kit][5], volume),
         'j': lambda: play_drum_note(drum_map[drum_kit][6], volume),
         'k': lambda: play_drum_note(drum_map[drum_kit][7], volume),
-        'l': lambda: play_drum_note(drum_map[drum_kit][8], volume)
+        'l': lambda: play_drum_note(drum_map[drum_kit][8], volume),
+        '\\': lambda: looper.delete_last()
     },
     "looper": {
         ';': lambda: change_y(-1),
@@ -454,6 +518,7 @@ key_map = {
         ',': lambda: ui_map[mode][y][3](),
         '1': lambda: set_mode('piano'),
         '3': lambda: set_mode('drums'),
+        '4': lambda: set_mode('options'),
         '0': lambda: looper.clear_events(),
         'r': lambda: looper.recording(),
         'p': lambda: looper.switch_play(),
@@ -461,151 +526,29 @@ key_map = {
         'm': lambda: print_info('Info'),
         '`': lambda: set_mode('menu'),
         '\\': lambda: looper.delete_last(),
+    },
+    "options": {
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1),
+        '/': lambda: ui_map[mode][y][3](),
+        ',': lambda: ui_map[mode][y][2](),
+        '1': lambda: set_mode('piano'),
+        '2': lambda: set_mode('looper'),
+        '3': lambda: set_mode('drums'),
+        '0': lambda: looper.clear_events(),
+        'm': lambda: print_info('Info'),
+        '`': lambda: set_mode('menu'),
+        '\\': lambda: looper.delete_last(),
+    },
+    "files": {
+        ';': lambda: change_y(-1),
+        '.': lambda: change_y(1),
+        '/': lambda: ui_map[mode][y][2](),
+        ',': lambda: ui_map[mode][y][3](),
+        '`': lambda: set_mode('options')
     }
-}
-
-
-#############
-#  CLASSES  #
-#############
-
-
-class Looper:
-    def __init__(self):
-        self.bpm = 120
-        self.time_signature = 5
-        self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
-        self.measure_time = None
-        self.events = []
-        self.is_recording = False
-        self.metronome_running = False
-        self.metronome_volume = 30
-        self.is_playing = False
-        self.history = []
-
-    def recording(self):
-        self.is_recording = not self.is_recording
-        update_screen(mode, y)
-
-    def switch_play(self):
-        global start_time, delta_time, idx, current_time
-        start_time = time_ns()
-        self.is_playing = not self.is_playing
-        if not self.is_playing:
-            idx = 0
-            delta_time = 0
-            current_time = 0
-
-    def change_time_signature(self, change):
-        if 0 < self.time_signature + change:
-            self.time_signature += change
-
-            self.events = [_ for _ in self.events if _[2] != 115]
-            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
-            interval = (60 / self.bpm) * 1e9
-            for beat in range(self.time_signature):
-                if beat == 0:
-                    pitch = 100
-                    t = interval * beat
-                elif beat == self.time_signature:
-                    pitch = 0
-                    t = self.measure_length
-                else:
-                    pitch = 88
-                    t = interval * beat
-                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
-            if self.metronome_running:
-                self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen(mode, y)
-
-    def change_bpm(self, change):
-        if 0 < self.bpm + change:
-            # to add: events time should be recalculated relative to bpm
-            self.bpm += change
-            self.events = [_ for _ in self.events if _[2] != 115]
-            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
-            interval = (60 / self.bpm) * 1e9
-            for beat in range(self.time_signature):
-                if beat == 0:
-                    pitch = 100
-                    t = interval * beat
-                elif beat == self.time_signature:
-                    pitch = 0
-                    t = self.measure_length
-                else:
-                    pitch = 88
-                    t = interval * beat
-                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
-            if self.metronome_running:
-                self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            update_screen(mode, y)
-
-    def loop(self):
-        global start_time, idx
-        if self.is_playing:
-            while True and self.events != []:
-                current_time = time_ns() - start_time
-                delta_time = current_time % self.measure_length
-                try:
-                    if delta_time > self.events[idx][0]:
-                        self.play_event(self.events[idx])
-                        idx += 1
-                        if idx >= len(self.events):
-                            idx = 0
-                            start_time = time_ns()
-                    else:
-                        break
-                except Exception as e:
-                    idx -= 1
-
-    def play_event(self, event):
-        global octave
-        old_octave = octave
-        octave = event[3]
-        synth.set_instrument(0, 0, event[2])
-        play_note(event[1], event[4])
-        octave = old_octave
-        synth.set_instrument(0, 0, instrument)
-
-    def init_metronome(self):
-        interval = (60 / self.bpm * 1e9)
-        for beat in range(self.time_signature):
-            if beat == 0:
-                pitch = 100
-                t = interval * beat
-            elif beat == self.time_signature:
-                pitch = 0
-                t = self.measure_length
-            else:
-                pitch = 88
-                t = interval * beat
-            self.events.append((t, pitch, 115, octave, 0))
-
-    def metronome(self):
-        self.metronome_running = not self.metronome_running
-        if not self.metronome_running:
-            self.events = [(event[0], event[1], event[2], event[3], 0 if event[2] == 115 else event[4]) for event in self.events]
-        else:
-            self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-        update_screen(mode, y)
-
-    def clear_events(self):
-        synth.set_all_notes_off(0)
-        self.events = [_ for _ in self.events if _[2] == 115]
-        self.is_playing = False
-        update_screen(mode, y)
-
-    def delete_last(self):
-        if not self.history:
-            return
-        last_event = self.history[-1]
-        if last_event in self.events:
-            del self.events[self.events.index(last_event)]
-            self.history.pop()
-        else:
-            self.history.pop()
-            self.delete_last()
-
+}  
+    
 
 ###############
 #  FUNCTIONS  #       
@@ -732,18 +675,22 @@ def main():
         kb.tick()
         looper.loop()
         M5.update()
-        time.sleep(0.00001)
+        # time.sleep(0.00001)
 
 def setup():
-    global kb, synth, looper
+    global kb, synth, looper, sd_card
     M5.begin()
     Widgets.setRotation(1)
     synth = SynthUnit((1, 2), 1)
     synth.set_instrument(0, 0, instrument)
-    synth.set_instrument(1, 1, 115)
-    synth.set_reverb(1, 0, 0, 0)
     kb = MatrixKeyboard()
     kb.set_callback(keyboard)
+    sd_card = None
+    try:
+        sd_card = SD_Card()
+        print("SD card loaded succesfully")
+    except Exception as e:
+        print("No SD card loaded:", str(e))
     looper.init_metronome()
     Widgets.fillScreen(background_color)
     update_screen(mode, y)
