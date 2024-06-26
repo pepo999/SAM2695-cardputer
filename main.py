@@ -47,7 +47,6 @@ class Looper:
     def change_time_signature(self, change):
         if 0 < self.time_signature + change:
             self.time_signature += change
-
             self.events = [_ for _ in self.events if _[2] != 115]
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
@@ -115,7 +114,7 @@ class Looper:
         octave = event[3]
         synth.set_instrument(0, 0, event[2])
         play_note(event[1], event[4])
-        octave = old_octave
+        octave = event[4]
         synth.set_instrument(0, 0, instrument)
 
     def play_drum_event(self, event):
@@ -226,6 +225,7 @@ synth = None
 mode = 'menu'
 looper = Looper()
 sd_card = None
+master = 125
 
 # SYNTH
 instrument = 1
@@ -285,6 +285,7 @@ ui_map = {
   "options": [
         ('', lambda: "Save ->" if sd_card else "No SD card found", lambda: set_mode("menu"), lambda: sd_card.save('test', looper.events)),
         ('', lambda: "Load ->" if sd_card else "", lambda: set_mode("menu"), lambda: sd_card.files()),
+        ('Master vol:', lambda: master, lambda: change_master(-1), lambda: change_master(1))
   ]
 }
         
@@ -578,7 +579,6 @@ def keyboard(kb):
         binary_search_insert(looper.events, (delta_time, note, instrument, octave, volume))
         looper.history.append((delta_time, note, instrument, octave, volume))
     drum_sound = drum_note_map.get(key, None)
-
     if looper.is_recording and looper.is_playing and drum_sound is not None and mode == 'drums':
         current_time = time_ns() - start_time
         delta_time = current_time % (looper.measure_length)
@@ -591,7 +591,12 @@ def play_note(note, volume):
         synth.set_all_notes_off(0)
     if -3 <= octave <= 3:
         note += octave_map[octave]
-    synth.set_note_on(0, note, volume)
+    volume_out = volume - (125 - master)
+    if volume_out >= 125:
+        volume_out = 125
+    if volume_out <= 0:
+        volume_out = 0
+    synth.set_note_on(0, note, volume_out)
     if channel + 1 <= 15:
         channel += 1
     else:
@@ -600,12 +605,17 @@ def play_note(note, volume):
 def play_drum_note(drum_sound, volume):
     if not polyphony:
         synth.set_all_notes_off(0)
-    synth.set_drums_instrument(drum_sound, volume)
+    volume_out = volume - (125 - master)
+    if volume_out >= 125:
+        volume_out = 125
+    if volume_out <= 0:
+        volume_out = 0
+    synth.set_drums_instrument(drum_sound, volume_out)
 
-def change_y(change):
-    global y
-    if 0 <= y + change < len(ui_map[mode]):
-        y += change
+def change_master(change):
+    global master
+    if 0 <= master + change <= 125:
+        master += change
     update_screen(mode, y)
 
 def change_y(change):
