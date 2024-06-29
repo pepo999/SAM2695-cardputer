@@ -116,6 +116,7 @@ class Looper:
         play_note(event[1], event[4])
         octave = event[4]
         synth.set_instrument(0, 0, instrument)
+        octave = old_octave
 
     def play_drum_event(self, event):
         play_drum_note(event[1], event[4])
@@ -149,7 +150,7 @@ class Looper:
         self.history = []
         self.is_playing = False
         Widgets.fillScreen(0x000000)
-        Widgets.Label('Events deleted', 10, 10, 2, 0xffffff, 0x000000)
+        Widgets.Label('Events cleared', 10, 10, 2, 0xffffff, 0x000000)
         time.sleep(1)
         update_screen(mode, y)
 
@@ -169,8 +170,9 @@ class SD_Card:
         self.sd_card = sdcard.SDCard(slot=3, width=1, sck=40, miso=39, mosi=14, cs=12, freq=1000000)
         self.directory = sdcard.os.getcwd()
         self.listdir = sdcard.os.listdir('/flash')
+        self.filename = ''
 
-    def save(self, filename, events):
+    def save(self, events):
         events = [_ for _ in events if _[2] != 115]
         if events != []:
             json_events = {
@@ -178,40 +180,69 @@ class SD_Card:
                 "time_signature": looper.time_signature,
                 "bpm": looper.bpm
             }
-            with open(self.directory + '/' + filename + '.json', 'w') as f:
+            with open(self.directory + '/' + self.filename + '.json', 'w') as f:
                 json_events = json.dump(json_events, f)
             Widgets.fillScreen(0x000000)
             Widgets.Label('Events saved', 10, 10, 2, 0xffffff, 0x000000)
             time.sleep(1)
+            self.filename = ''
             set_mode("looper")
+        
+    def load_file(self, files, idx):
+        with open(files[idx], 'r') as f:
+            events_dict = json.load(f)
+        looper.events = events_dict["events"]
+        looper.time_signature = events_dict["time_signature"]
+        looper.bpm = events_dict["bpm"]
+        looper.is_playing = False
+        looper.metronome_running = False
+        looper.measure_length = (60 / looper.bpm) * looper.time_signature * 1e9
+        interval = (60 / looper.bpm) * 1e9
+        for beat in range(looper.time_signature):
+            if beat == 0:
+                pitch = 100
+                t = interval * beat
+            elif beat == looper.time_signature:
+                pitch = 0
+                t = looper.measure_length
+            else:
+                pitch = 88
+                t = interval * beat
+            binary_search_insert(looper.events, (t, pitch, 115, octave, 0))
+        Widgets.fillScreen(0x000000)
+        Widgets.Label('Events loaded', 10, 10, 2, 0xffffff, 0x000000)
+        time.sleep(1)
+        set_mode("looper")
 
     def files(self):
-        files = [_ for _ in self.listdir if _.endswith('.json')]
-        if files != []:
-            with open(files[0], 'r') as f:
-                events_dict = json.load(f)
-            looper.events = events_dict["events"]
-            looper.time_signature = events_dict["time_signature"]
-            looper.bpm = events_dict["bpm"]
-            looper.is_playing = False
-            looper.metronome_running = False
-            looper.measure_length = (60 / looper.bpm) * looper.time_signature * 1e9
-            interval = (60 / looper.bpm) * 1e9
-            for beat in range(looper.time_signature):
-                if beat == 0:
-                    pitch = 100
-                    t = interval * beat
-                elif beat == looper.time_signature:
-                    pitch = 0
-                    t = looper.measure_length
-                else:
-                    pitch = 88
-                    t = interval * beat
-                binary_search_insert(looper.events, (t, pitch, 115, octave, 0))
-            Widgets.fillScreen(0x000000)
-            Widgets.Label('Events loaded', 10, 10, 2, 0xffffff, 0x000000)
-            time.sleep(1)
-            set_mode("looper")
+        self.sd_card = sdcard.SDCard(slot=3, width=1, sck=40, miso=39, mosi=14, cs=12, freq=1000000)
+        self.directory = sdcard.os.getcwd()
+        self.listdir = sdcard.os.listdir('/flash')
+        files = [f for f in self.listdir if f.endswith('.json')]
+        files = sorted(files)
+        if not files:
+            ui_map["files"].append(
+                ("No files on sd card found", lambda: print_info(''), lambda: print_info(''), lambda: print_info(''))
+            )
+        else:
+            files_ui = [
+                (f.replace('.json', ''), "", lambda idx=idx: self.load_file(files, idx), lambda: print_info(''))
+                for idx, f in enumerate(files)
+            ]
+            ui_map["files"] = files_ui
+        set_mode("files")
+
+    def delete_file(self, y):
+        self.sd_card = sdcard.SDCard(slot=3, width=1, sck=40, miso=39, mosi=14, cs=12, freq=1000000)
+        self.directory = sdcard.os.getcwd()
+        self.listdir = sdcard.os.listdir('/flash')
+        files = [f for f in self.listdir if f.endswith('.json')]
+        os.remove(files[y])
+        Widgets.fillScreen(0x000000)
+        Widgets.Label('File deleted', 10, 10, 2, 0xffffff, 0x000000)
+        time.sleep(1)
+        set_mode("options")
+
 
 
 ######################
@@ -244,6 +275,7 @@ drum_idx = 0
 
 # SCREEN
 y = 0 # UI position
+rel_y = 0
 background_color = 0xB45B9F # 0xFFB6C1
 
 # MAPS
@@ -267,7 +299,7 @@ ui_map = {
         ],
   "piano": [
         ("Inst:", lambda: instruments_map[instrument], lambda: change_instrument(1), lambda: change_instrument(-1)),
-        ("Octave:", lambda: octave + 4, lambda: change_octave(1), lambda: change_octave(-1)),
+        ("Octave:", lambda: str(octave + 4) + ' ' * 5, lambda: change_octave(1), lambda: change_octave(-1)),
         ("Polyphony:", lambda: polyphony, lambda: switch_polyphony(), lambda: switch_polyphony()),
         ("Volume:", lambda: volume, lambda: change_volume(5), lambda: change_volume(-5))
   ],
@@ -283,9 +315,15 @@ ui_map = {
         ('Time signature:', lambda: looper.time_signature - 1, lambda: looper.change_time_signature(1), lambda: looper.change_time_signature(-1))
   ],
   "options": [
-        ('', lambda: "Save ->" if sd_card else "No SD card found", lambda: set_mode("menu"), lambda: sd_card.save('test', looper.events)),
+        ('', lambda: "Save ->" if sd_card else "No SD card found", lambda: set_mode("menu"), lambda: set_mode("filename")),
         ('', lambda: "Load ->" if sd_card else "", lambda: set_mode("menu"), lambda: sd_card.files()),
         ('Master vol:', lambda: master, lambda: change_master(-1), lambda: change_master(1))
+  ],
+  "files": [
+
+  ],
+  "filename": [
+       ('Name:', lambda: sd_card.filename if sd_card else "No SD card found", lambda: print(''), lambda: sd_card.save(looper.events))
   ]
 }
         
@@ -526,7 +564,7 @@ key_map = {
         'q': lambda: looper.metronome(),
         'm': lambda: print_info('Info'),
         '`': lambda: set_mode('menu'),
-        '\\': lambda: looper.delete_last(),
+        '\\': lambda: looper.delete_last()
     },
     "options": {
         ';': lambda: change_y(-1),
@@ -539,14 +577,23 @@ key_map = {
         '0': lambda: looper.clear_events(),
         'm': lambda: print_info('Info'),
         '`': lambda: set_mode('menu'),
-        '\\': lambda: looper.delete_last(),
+        '\\': lambda: looper.delete_last()
     },
     "files": {
         ';': lambda: change_y(-1),
         '.': lambda: change_y(1),
         '/': lambda: ui_map[mode][y][2](),
         ',': lambda: ui_map[mode][y][3](),
-        '`': lambda: set_mode('options')
+        '`': lambda: set_mode('options'),
+        'd': lambda: sd_card.delete_file(y),
+        '1': lambda: set_mode('piano'),
+        '2': lambda: set_mode('looper'),
+        '3': lambda: set_mode('drums')
+    },
+    "filename":{
+      '`': lambda: set_mode('options'),
+      ',': lambda: set_mode('options'),
+      '/': lambda: ui_map[mode][y][3]()
     }
 }  
     
@@ -572,6 +619,14 @@ def keyboard(kb):
     key = kb.get_string()
     if key in key_map[mode]:
         key_map[mode][key]()
+
+    if mode == "filename" and key != '\\' and key != '/':
+        sd_card.filename += key
+        set_mode("filename")
+    if mode == "filename" and key == '\\':
+        sd_card.filename = sd_card.filename[:-1] if len(sd_card.filename) > 0 else sd_card.filename
+        set_mode("filename")
+
     note = note_map.get(key, None)
     if looper.is_recording and looper.is_playing and note and mode == 'piano':
         current_time = time_ns() - start_time
@@ -584,6 +639,7 @@ def keyboard(kb):
         delta_time = current_time % (looper.measure_length)
         binary_search_insert(looper.events, (delta_time, drum_map[drum_kit][drum_sound], '', 0, volume))
         looper.history.append((delta_time, drum_map[drum_kit][drum_sound], '', 0, volume))
+    
 
 def play_note(note, volume):
     global synth, octave, channel
@@ -647,8 +703,9 @@ def change_octave(change):
     update_screen(mode, y)
 
 def set_mode(new_mode):
-    global mode, y
+    global mode, y, rel_h
     y = 0
+    rel_y = 0
     mode = new_mode
     update_screen(mode, y)
 
@@ -662,12 +719,15 @@ def print_info(info):
 
 def update_screen(mode, y):
     label_y = 10
+    if y >= 4:
+        label_y -= (20 * (y - 4))
     if mode == 'menu':
         Widgets.fillScreen(background_color)
         for idx, label_info in enumerate(ui_map[mode]):
             label_text = label_info[0]
             Widgets.Label(label_text, 10, label_y, 2, 0xffffff, 0x000000)
             label_y += 20
+
     else:
         Widgets.fillScreen(0x000000)
         for idx, label_info in enumerate(ui_map[mode]):
