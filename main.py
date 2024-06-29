@@ -67,9 +67,15 @@ class Looper:
 
     def change_bpm(self, change):
         if 0 < self.bpm + change:
-            # to add: events time should be recalculated relative to bpm
-            self.bpm += change
+            old_bpm = self.bpm
+            new_bpm = self.bpm + change
+            bpm_ratio = old_bpm / new_bpm
+            
+            self.bpm = new_bpm
+            
+            self.events = [(event[0] * bpm_ratio, event[1], event[2], event[3], event[4]) for event in self.events]
             self.events = [_ for _ in self.events if _[2] != 115]
+            
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
             for beat in range(self.time_signature):
@@ -82,9 +88,11 @@ class Looper:
                 else:
                     pitch = 88
                     t = interval * beat
-                binary_search_insert(self.events, (t, pitch, 115, octave, 0))
+                binary_search_insert(self.events, (t, pitch, 115, 0, 0))
+            
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
+            
             update_screen(mode, y)
 
     def loop(self):
@@ -242,7 +250,6 @@ class SD_Card:
         Widgets.Label('File deleted', 10, 10, 2, 0xffffff, 0x000000)
         time.sleep(1)
         set_mode("options")
-
 
 
 ######################
