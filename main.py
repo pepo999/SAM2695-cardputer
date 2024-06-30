@@ -18,13 +18,15 @@ import json
 class Looper:
     def __init__(self):
         self.bpm = 120
-        self.time_signature = 5
+        self.beats = 5
+        self.n_measures = 1
+        self.time_signature = ((self.beats - 1) * self.n_measures) + 1
         self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
         self.measure_time = None
         self.events = []
         self.is_recording = False
         self.metronome_running = False
-        self.metronome_volume = 30
+        self.metronome_volume = 40
         self.is_playing = False
         self.history = []
 
@@ -44,14 +46,18 @@ class Looper:
                 synth.set_all_notes_off(i)
         update_screen(mode, y)
 
-    def change_time_signature(self, change):
-        if 0 < self.time_signature + change:
-            self.time_signature += change
+    def change_time_signature(self, change, change_measures):
+        if 0 < self.beats + change and 0 < self.n_measures + change_measures:
+            self.beats += change
+            self.n_measures += change_measures
+            self.time_signature = ((self.beats - 1) * self.n_measures) + 1
+            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
+            
             self.events = [_ for _ in self.events if _[2] != 115]
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
             for beat in range(self.time_signature):
-                if beat == 0:
+                if beat == 0 or beat % (self.beats - 1) == 0:
                     pitch = 100
                     t = interval * beat
                 elif beat == self.time_signature:
@@ -70,16 +76,13 @@ class Looper:
             old_bpm = self.bpm
             new_bpm = self.bpm + change
             bpm_ratio = old_bpm / new_bpm
-            
             self.bpm = new_bpm
-            
             self.events = [(event[0] * bpm_ratio, event[1], event[2], event[3], event[4]) for event in self.events]
             self.events = [_ for _ in self.events if _[2] != 115]
-            
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
             for beat in range(self.time_signature):
-                if beat == 0:
+                if beat == 0 or beat % (self.beats - 1) == 0:
                     pitch = 100
                     t = interval * beat
                 elif beat == self.time_signature:
@@ -89,10 +92,8 @@ class Looper:
                     pitch = 88
                     t = interval * beat
                 binary_search_insert(self.events, (t, pitch, 115, 0, 0))
-            
             if self.metronome_running:
                 self.events = [(event[0], event[1], event[2], event[3], self.metronome_volume if event[2] == 115 else event[4]) for event in self.events]
-            
             update_screen(mode, y)
 
     def loop(self):
@@ -132,7 +133,7 @@ class Looper:
     def init_metronome(self):
         interval = (60 / self.bpm * 1e9)
         for beat in range(self.time_signature):
-            if beat == 0:
+            if beat == 0 or beat % (self.beats - 1) == 0:
                 pitch = 100
                 t = interval * beat
             elif beat == self.time_signature:
@@ -185,7 +186,9 @@ class SD_Card:
         if events != []:
             json_events = {
                 "events": events,
-                "time_signature": looper.time_signature,
+                "beats": looper.beats,
+                "n_measures": looper.n_measures,
+                # "time_signature": looper.time_signature,
                 "bpm": looper.bpm
             }
             with open(self.directory + '/' + self.filename + '.json', 'w') as f:
@@ -200,14 +203,16 @@ class SD_Card:
         with open(files[idx], 'r') as f:
             events_dict = json.load(f)
         looper.events = events_dict["events"]
-        looper.time_signature = events_dict["time_signature"]
+        looper.beats = events_dict["beats"]
+        looper.n_measures = events_dict["n_measures"]
+        looper.time_signature = ((looper.beats - 1) * looper.n_measures) + 1
         looper.bpm = events_dict["bpm"]
         looper.is_playing = False
         looper.metronome_running = False
         looper.measure_length = (60 / looper.bpm) * looper.time_signature * 1e9
         interval = (60 / looper.bpm) * 1e9
         for beat in range(looper.time_signature):
-            if beat == 0:
+            if beat == 0 or beat % (self.beats - 1) == 0:
                 pitch = 100
                 t = interval * beat
             elif beat == looper.time_signature:
@@ -318,8 +323,9 @@ ui_map = {
         ('Metronome:', lambda: "On" if looper.metronome_running else "Off", lambda: looper.metronome(), lambda: looper.metronome()),
         ('Playing:', lambda: "On" if looper.is_playing else "Off", lambda: looper.switch_play(), lambda: looper.switch_play()),
         ('Recording:', lambda: "On" if looper.is_recording else "Off", lambda: looper.recording(), lambda: looper.recording()),
-        ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(5), lambda: looper.change_bpm(-5)),
-        ('Time signature:', lambda: looper.time_signature - 1, lambda: looper.change_time_signature(1), lambda: looper.change_time_signature(-1))
+        ('Bpm:', lambda: looper.bpm, lambda: looper.change_bpm(1), lambda: looper.change_bpm(-1)),
+        ('Time signature:', lambda: str(looper.beats - 1) + '/4', lambda: looper.change_time_signature(1, 0), lambda: looper.change_time_signature(-1, 0)),
+        ('Measures:', lambda: looper.n_measures, lambda: looper.change_time_signature(0, 1), lambda: looper.change_time_signature(0, -1))
   ],
   "options": [
         ('', lambda: "Save ->" if sd_card else "No SD card found", lambda: set_mode("menu"), lambda: set_mode("filename")),
