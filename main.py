@@ -51,18 +51,22 @@ class Looper:
             self.beats += change
             self.n_measures += change_measures
             self.time_signature = ((self.beats - 1) * self.n_measures) + 1
-            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
-            
+            self.measure_length = (60 / self.bpm) * self.time_signature * 1e9  
             self.events = [_ for _ in self.events if _[2] != 115]
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
             for beat in range(self.time_signature):
-                if beat == 0 or beat % (self.beats - 1) == 0:
-                    pitch = 100
+                if beat == 0:
+                    pitch = 112
                     t = interval * beat
+                elif beat % (self.beats - 1) == 0:
+                    pitch = 100
+                    t = interval *  beat
                 elif beat == self.time_signature:
                     pitch = 0
                     t = self.measure_length
+                elif beat == self.time_signature -1:
+                    continue
                 else:
                     pitch = 88
                     t = interval * beat
@@ -82,12 +86,17 @@ class Looper:
             self.measure_length = (60 / self.bpm) * self.time_signature * 1e9
             interval = (60 / self.bpm) * 1e9
             for beat in range(self.time_signature):
-                if beat == 0 or beat % (self.beats - 1) == 0:
-                    pitch = 100
+                if beat == 0:
+                    pitch = 112
                     t = interval * beat
+                elif beat % (self.beats - 1) == 0:
+                    pitch = 100
+                    t = interval *  beat
                 elif beat == self.time_signature:
                     pitch = 0
                     t = self.measure_length
+                elif beat == self.time_signature -1:
+                    continue
                 else:
                     pitch = 88
                     t = interval * beat
@@ -107,6 +116,11 @@ class Looper:
                         if self.events[idx][2] == '':
                             self.play_drum_event(self.events[idx])
                         else:
+                            #----------------------------
+                            met = [_ for _ in self.events if _[2] == 115]
+                            if self.events[idx] in met:
+                                print(met.index(self.events[idx]))
+                            #----------------------------
                             self.play_event(self.events[idx])
                         idx += 1
                         if idx >= len(self.events):
@@ -133,12 +147,17 @@ class Looper:
     def init_metronome(self):
         interval = (60 / self.bpm * 1e9)
         for beat in range(self.time_signature):
-            if beat == 0 or beat % (self.beats - 1) == 0:
-                pitch = 100
+            if beat == 0:
+                pitch = 112
                 t = interval * beat
+            elif beat % (self.beats - 1) == 0:
+                pitch = 100
+                t = interval *  beat
             elif beat == self.time_signature:
                 pitch = 0
                 t = self.measure_length
+            elif beat == self.time_signature -1:
+                continue
             else:
                 pitch = 88
                 t = interval * beat
