@@ -116,11 +116,6 @@ class Looper:
                         if self.events[idx][2] == '':
                             self.play_drum_event(self.events[idx])
                         else:
-                            #----------------------------
-                            met = [_ for _ in self.events if _[2] == 115]
-                            if self.events[idx] in met:
-                                print(met.index(self.events[idx]))
-                            #----------------------------
                             self.play_event(self.events[idx])
                         idx += 1
                         if idx >= len(self.events):
@@ -231,7 +226,7 @@ class SD_Card:
         looper.measure_length = (60 / looper.bpm) * looper.time_signature * 1e9
         interval = (60 / looper.bpm) * 1e9
         for beat in range(looper.time_signature):
-            if beat == 0 or beat % (self.beats - 1) == 0:
+            if beat == 0 or beat % (looper.beats - 1) == 0:
                 pitch = 100
                 t = interval * beat
             elif beat == looper.time_signature:
